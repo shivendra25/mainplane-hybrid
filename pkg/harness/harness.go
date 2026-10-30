@@ -364,6 +364,8 @@ func (h *Harness) step(ctx context.Context, s *session, id string, conf statefil
 	var calls []statefile.Record
 	var appendErr error
 	req := provider.Request{Model: model, Key: chain[0].ID, Tools: Tools(conf.Tools, conf.Input), Context: records, Params: conf.Params}
+	var lines []string // the index lines of this step: one per call, and the reply when the step closes
+	textB := 0         // the session's text blocks at this step, for the closing index line
 	hdr, err := p.Step(ctx, req, func(r statefile.Record) {
 		r.Step = stepID
 		if r.ID == "" {
@@ -372,8 +374,15 @@ func (h *Harness) step(ctx context.Context, s *session, id string, conf statefil
 		if r.Kind == statefile.Call {
 			calls = append(calls, r)
 		}
+		if r.Kind == statefile.Text {
+			textB += len(r.Body)
+		}
 		if appendErr == nil {
-			_, appendErr = h.append(s, r)
+			var n int
+			n, appendErr = h.append(s, r)
+			if r.Kind == statefile.Call {
+				calls[len(calls)-1].N = n // Append fills N on its own copy
+			}
 		}
 	})
 	if appendErr != nil {
@@ -388,7 +397,8 @@ func (h *Harness) step(ctx context.Context, s *session, id string, conf statefil
 		return statefile.StatusFailed, err
 	}
 	hdr.Kind, hdr.ID, hdr.Upto, hdr.Harness = statefile.Step, stepID, upto, version.V
-	if _, err := h.append(s, statefile.Record{Header: hdr}); err != nil {
+	stepN, err := h.append(s, statefile.Record{Header: hdr})
+	if err != nil {
 		return "", err
 	}
 	for _, c := range calls {
@@ -399,9 +409,17 @@ func (h *Harness) step(ctx context.Context, s *session, id string, conf statefil
 				r = result(c.ID, "stopped, effect unknown")
 			}
 		}
-		if _, err := h.append(s, r); err != nil {
+		n, err := h.append(s, r)
+		if err != nil {
 			return "", err
 		}
+		lines = append(lines, lineOf(c, r, n))
+	}
+	if len(calls) == 0 {
+		lines = append(lines, fmt.Sprintf("recs %d-%d reply %dB, no calls", upto, stepN, textB))
+	}
+	if _, err := h.append(s, indexRecord(lines)); err != nil {
+		return "", err
 	}
 	if via := s.stoppedBy(); via != "" {
 		_, err := h.append(s, errorRecord(via, fmt.Sprintf(halted, via)))
@@ -522,6 +540,12 @@ func (h *Harness) execute(ctx context.Context, id string, conf statefile.Conf, c
 	var a args
 	if err := json.Unmarshal(c.Arguments, &a); err != nil {
 		return result(call.ID, "error: "+err.Error())
+	}
+	if c.Name == "logs" { // the logs tool reads the harness's own log files
+		r, dropped := h.searchLogs(id, a)
+		r = finish(c.Name, a, r, dropped)
+		r.Kind, r.For = statefile.Result, call.ID
+		return r
 	}
 	if a.Worker == worker.Harness { // a model may take the mesh's name for the machine
 		return result(call.ID, "error: harness is the harness's address on the mesh, not a worker; the worker on the harness's machine is "+worker.Admin)

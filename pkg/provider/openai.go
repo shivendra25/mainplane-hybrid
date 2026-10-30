@@ -141,7 +141,7 @@ func respUser(recs []statefile.Record) []any {
 			} else {
 				parts = append(parts, respPart{Type: "input_text", Text: string(r.Body)})
 			}
-		case statefile.Start, statefile.Config, statefile.Name, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
 		}
 	}
 	if len(parts) > 0 {
@@ -166,7 +166,7 @@ func (e openai) assistant(recs []statefile.Record) ([]any, error) {
 				return nil, fmt.Errorf("call %s: %w", r.ID, err)
 			}
 			items = append(items, respCall{Type: "function_call", CallID: r.ID, Name: c.Name, Arguments: string(c.Arguments)})
-		case statefile.Start, statefile.Config, statefile.Name, statefile.System, statefile.Message,
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.System, statefile.Message,
 			statefile.Step, statefile.Result, statefile.Error:
 		}
 	}

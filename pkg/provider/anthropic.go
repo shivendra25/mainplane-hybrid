@@ -153,7 +153,7 @@ func anthUser(recs []statefile.Record) []anthBlock {
 			} else {
 				blocks = append(blocks, anthBlock{Type: "text", Text: string(r.Body)})
 			}
-		case statefile.Start, statefile.Config, statefile.Name, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
 		}
 	}
 	return blocks
@@ -177,7 +177,7 @@ func anthAssistant(name string, recs []statefile.Record) ([]any, error) {
 				return nil, fmt.Errorf("call %s: %w", r.ID, err)
 			}
 			content = append(content, anthBlock{Type: "tool_use", ID: r.ID, Name: c.Name, Input: c.Arguments})
-		case statefile.Start, statefile.Config, statefile.Name, statefile.System, statefile.Message,
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.System, statefile.Message,
 			statefile.Step, statefile.Result, statefile.Error:
 		}
 	}

@@ -179,7 +179,7 @@ func gemUser(recs []statefile.Record, names map[string]string) []gemContent {
 			} else {
 				parts = append(parts, gemPart{Text: string(r.Body)})
 			}
-		case statefile.Start, statefile.Config, statefile.Name, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
 		}
 	}
 	var out []gemContent
@@ -224,7 +224,7 @@ func (e gemini) model(recs []statefile.Record, names map[string]string) ([]gemPa
 				ThoughtSignature: pending,
 			})
 			pending = ""
-		case statefile.Start, statefile.Config, statefile.Name, statefile.System, statefile.Message,
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.System, statefile.Message,
 			statefile.Step, statefile.Result, statefile.Error:
 		}
 	}

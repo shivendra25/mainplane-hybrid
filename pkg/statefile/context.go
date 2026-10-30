@@ -1,17 +1,56 @@
 package statefile
 
+import "fmt"
+
 // seen reports whether record r was in the context that step s was built from.
 func seen(r, s Record) bool { return r.N <= s.Upto }
 
 func isBlock(k Kind) bool { return k == Text || k == Thinking || k == Call }
+
+// keepB is the largest result body a step keeps whole in its next context.
+// Bodies over it, once a later step has acted on them, are cut to a line
+// pointing at their record: the raw bytes live in the log file, where the
+// logs tool reads them back. Keeping more floods the context and kills the
+// session at the limit; keeping less makes every heavier payload useless.
+const keepB = 1 << 12
+
+// pruned cuts a result's body out of the context, keeping what the model
+// needs to fetch it back whole: its record, its spilled output file, and how
+// exact the search is.
+func pruned(r Record) Record {
+	b := fmt.Sprintf("[result body %d bytes out of context, record %d of the log has it, the index line for this call names it, the logs tool reads it back", len(r.Body), r.N)
+	if r.FullOutput != "" {
+		b += fmt.Sprintf(", the file %s on the worker also has it", r.FullOutput)
+	}
+	r.Type, r.Body = "text/plain", []byte(b+"]")
+	return r
+}
 
 // Build reorders a file into context order and returns it with the index the
 // next step's upto must carry. File order is time order; the API wants each
 // step's results directly after it. So for each step: the results it saw,
 // then the messages it saw as one user turn, then its blocks, then the step
 // record itself. Blocks no step closed are dropped. Start and config never
-// enter.
+// enter. Of the index records only the newest enters, and a result a later
+// step has acted on gives up a body over keepB.
 func Build(chain []Record) ([]Record, int) {
+	newest := 0 // the newest index record wins; older ones are out of context
+	for _, r := range chain {
+		if r.Kind == Index {
+			newest = r.N
+		}
+	}
+	prune := make([]bool, len(chain))
+	for i, r := range chain { // a result a later step has acted on stop being live
+		if r.Kind == Result && len(r.Body) > keepB {
+			for _, s := range chain {
+				if s.Kind == Step && s.N > r.N && seen(r, s) {
+					prune[i] = true
+					break
+				}
+			}
+		}
+	}
 	var ctx, pending []Record
 	blocks := map[string][]Record{}
 	flush := func(s *Record) {
@@ -30,9 +69,10 @@ func Build(chain []Record) ([]Record, int) {
 		}
 		pending = rest
 	}
-	for _, r := range chain {
+	for i, r := range chain {
 		switch {
 		case r.Kind == Start || r.Kind == Config || r.Kind == Name:
+		case r.Kind == Index && r.N != newest:
 		case isBlock(r.Kind):
 			blocks[r.Step] = append(blocks[r.Step], r)
 		case r.Kind == Step:
@@ -41,6 +81,9 @@ func Build(chain []Record) ([]Record, int) {
 			ctx = append(ctx, r)
 			delete(blocks, r.ID)
 		default:
+			if r.Kind == Result && prune[i] {
+				r = pruned(r)
+			}
 			pending = append(pending, r)
 		}
 	}
@@ -75,7 +118,7 @@ func Waiting(chain []Record) []Record {
 					break
 				}
 			}
-		case Start, Config, System, Message, Text, Thinking, Error, Name:
+		case Start, Config, System, Message, Text, Thinking, Error, Index, Name:
 		}
 	}
 	return waiting

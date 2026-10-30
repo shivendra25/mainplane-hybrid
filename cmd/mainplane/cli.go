@@ -327,6 +327,8 @@ func render(r statefile.Record) {
 		fmt.Printf("%s  %s\n", head, r.Body)
 	case statefile.System:
 		fmt.Printf("%s  %s | %s\n", head, r.Source, skim(r.Body))
+	case statefile.Index:
+		fmt.Printf("%s\n%s\n", strings.TrimRight(head, " "), skim(r.Body))
 	case statefile.Name:
 		fmt.Printf("%s  via=%s  %s\n", head, r.Via, r.Body)
 	case statefile.Message:

@@ -195,7 +195,7 @@ func bedUser(recs []statefile.Record) []bedBlock {
 			} else {
 				blocks = append(blocks, bedBlock{Text: string(r.Body)})
 			}
-		case statefile.Start, statefile.Config, statefile.Name, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
 		}
 	}
 	return blocks
@@ -217,7 +217,7 @@ func (e bedrock) assistant(recs []statefile.Record) ([]bedBlock, error) {
 				return nil, fmt.Errorf("call %s: %w", r.ID, err)
 			}
 			content = append(content, bedBlock{ToolUse: &bedToolUse{ToolUseID: r.ID, Name: c.Name, Input: c.Arguments}})
-		case statefile.Start, statefile.Config, statefile.Name, statefile.System, statefile.Message,
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.System, statefile.Message,
 			statefile.Step, statefile.Result, statefile.Error:
 		}
 	}

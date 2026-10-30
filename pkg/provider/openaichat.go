@@ -146,7 +146,7 @@ func chatUser(recs []statefile.Record) []chatMsg {
 			} else {
 				parts = append(parts, chatPart{Type: "text", Text: string(r.Body)})
 			}
-		case statefile.Start, statefile.Config, statefile.Name, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.Text, statefile.Thinking, statefile.Call, statefile.Step:
 		}
 	}
 	if len(parts) > 0 {
@@ -181,7 +181,7 @@ func (e openaiChat) assistant(recs []statefile.Record) (chatMsg, error) {
 				return m, fmt.Errorf("call %s: %w", r.ID, err)
 			}
 			m.ToolCalls = append(m.ToolCalls, chatToolCall{ID: r.ID, Type: "function", Function: chatCallBody{c.Name, string(c.Arguments)}})
-		case statefile.Start, statefile.Config, statefile.Name, statefile.System, statefile.Message,
+		case statefile.Start, statefile.Config, statefile.Name, statefile.Index, statefile.System, statefile.Message,
 			statefile.Step, statefile.Result, statefile.Error:
 		}
 	}

@@ -408,7 +408,7 @@ func (s *session) add(a *App, recs []statefile.Record, info harness.Info) {
 // show puts a record in the transcript, or a result in its call's block.
 func (s *session) show(r statefile.Record) {
 	switch r.Kind {
-	case statefile.Start, statefile.Config, statefile.System, statefile.Name, statefile.Thinking, statefile.Step:
+	case statefile.Start, statefile.Config, statefile.System, statefile.Name, statefile.Index, statefile.Thinking, statefile.Step:
 	case statefile.Message:
 		b := &msgBlock{r}
 		s.asked = append(s.asked, b)

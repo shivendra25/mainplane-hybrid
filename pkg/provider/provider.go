@@ -449,7 +449,7 @@ func Turns(rest []statefile.Record) []Turn {
 				r.Body = append([]byte(line), r.Body...)
 			}
 			push(false, r)
-		case statefile.Result, statefile.System, statefile.Error:
+		case statefile.Result, statefile.System, statefile.Error, statefile.Index:
 			push(false, r)
 		case statefile.Start, statefile.Config, statefile.Name:
 		}

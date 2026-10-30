@@ -33,8 +33,8 @@ Here is how the Mainplane harness works:
 - Connectors are the various user interfaces connected to the Mainplane. User messages can come from any of them
 
 Tools:
-- There are two kinds of tools, shell execution and file operations
-- All tools require passing a "worker" argument. This specifies which connected machine the tool is executed on
+- Tools are shell execution, file operations, and the logs search
+- Every tool but the logs one requires passing a "worker" argument. This specifies which connected machine the tool is executed on
 - The primary tool is "run" which executes code in the shell of the worker
 - Access to the shell of a machine is complete access. You have been given full control of the workers you are connected to
 - The file operation tools are for direct manipulation of data
@@ -108,6 +108,13 @@ Context Management:
 - An AGENTS.md for project specific context should be placed in the root directory of that project
 - Every root AGENTS.md of every worker scratch and every drive is read whole at the start of every session. Its length is a context cost paid by every one of those sessions
 - A terminal command to list AGENTS.md file paths up to depth 3 for every worker scratch and every drive is executed automatically at session start
+
+Memory:
+- After every step the harness appends an index record. It is the newest of its kind and the only one in your context, and it is the complete map of the session: one line per call, naming the tool, the file or the command, the result size, the exit code, and the record numbers that hold the raw bytes
+- A tool result leaves your context once a later step has acted on it: its body is cut to a line pointing at its record. The index entry tells you what that result was; its raw bytes are one logs call away. Zero summarizing, zero loss
+- The logs tool reads those raw bytes back: exact payloads, stack traces, and file contents from every step of the session, at the record range the index names
+- To recover exact data: find the call's record range in the index, then call logs with the query and from and to. Large run outputs also stay in the scratch file named in the line cut note
+- A session that continues a previous one can search that session's log by its id
 
 Bug reporting:
 - This harness is Mainplane version %s
@@ -184,7 +191,7 @@ func Tools(name string, input []string) []provider.Tool {
 	if len(input) > 0 {
 		read.Description = "Read a file on a worker. A file of type " + strings.Join(input, ", ") + " is returned as media, any other file as text"
 	}
-	return map[string][]provider.Tool{"default": {run, read, write, edit}, "patch": {run, read, patch}}[name]
+	return map[string][]provider.Tool{"default": {run, read, write, edit, logs}, "patch": {run, read, patch, logs}}[name]
 }
 
 func schema(s string) json.RawMessage { return json.RawMessage(s) }
@@ -194,11 +201,14 @@ var (
 	write = provider.Tool{Name: "write", Description: "Write a file on a worker", Schema: schema(`{"type":"object","properties":{"worker":{"type":"string"},"path":{"type":"string"},"content":{"type":"string"}},"required":["worker","path","content"]}`)}
 	edit  = provider.Tool{Name: "edit", Description: "Edit a file with replacement on a worker", Schema: schema(`{"type":"object","properties":{"worker":{"type":"string"},"path":{"type":"string"},"old":{"type":"string"},"new":{"type":"string"}},"required":["worker","path","old","new"]}`)}
 	patch = provider.Tool{Name: "patch", Description: "Apply a patch in the apply_patch format on a worker", Schema: schema(`{"type":"object","properties":{"worker":{"type":"string"},"input":{"type":"string"}},"required":["worker","input"]}`)}
+	logs  = provider.Tool{Name: "logs", Description: "Search the raw bodies of this session's records. The newest index record maps every call to its record range and what it did; query it before searching, and give a narrow from and to", Schema: schema(`{"type":"object","properties":{"query":{"type":"string","description":"case-insensitive substring of record bodies"},"from":{"type":"integer","description":"first record number to search"},"to":{"type":"integer","description":"last record number to search"},"session":{"type":"string","description":"search another session's log by its id; default this session"}},"required":["query"]}`)}
 )
 
 type args struct {
 	Worker, Code, Interpreter, Path, Content, Old, New, Input string
+	Query, Session                                            string
 	Timeout                                                   int
+	From, To                                                  int
 	Background                                                bool
 }
 
@@ -308,6 +318,9 @@ func finish(tool string, a args, r statefile.Record, dropped int) statefile.Reco
 		}
 		r.Truncated = true
 		note := fmt.Sprintf("[%d lines cut, whole output at %s]", cut, r.FullOutput)
+		if r.FullOutput == "" {
+			note = fmt.Sprintf("[%d lines cut; narrow the search: a query and a record range]", cut)
+		}
 		if tool == "run" {
 			r.Body = append([]byte(note+"\n"), kept...)
 		} else {
