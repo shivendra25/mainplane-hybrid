@@ -8,6 +8,37 @@
   <img src="https://raw.githubusercontent.com/mainplane-ai/github-media/main/tui-light.svg" alt="The Mainplane TUI: a sidebar of sessions on different models, and an agent that moves a Qwen fine-tune from a GPU server to a Mac Studio and quantizes it to run there" width="960">
 </picture>
 
+# This fork: hybrid session memory
+
+A fork of [mainplane-ai/mainplane](https://github.com/mainplane-ai/mainplane), everything upstream plus two additions to how an agent session remembers. Upstream, a tool result stays whole in the context of every later step: a 30 KB payload costs the same bytes again at every following step, and the session fails the moment the whole no longer fits the context limit. And what the session holds is only in raw record bodies, with no map back to them. This fork keeps a map of the session in the model's context and holds the exact raw bytes one retrieval tool call away: no summarizing anywhere, so nothing is lost and nothing is forgotten.
+
+**The index record.** After every step the harness appends one `index` record to the log, one line per call, naming the record range that holds the raw bytes, the tool, the file or the command, the result size, and the exit code:
+
+```
+recs 40-41 read schema.json 31000B
+recs 42-43 run on build "go test ./..." 187B exit 0
+```
+
+Only the newest index record stays in the context, and its body is capped at 4 KiB, oldest lines first. Built by the harness alone, so it costs no model call and is exact.
+
+**Raw byte pruning.** A result body over 4 KiB leaves the context once a later step has acted on it. The body becomes one line pointing at its record and at the scratch file a run spilled to:
+
+```
+[result body 31000 bytes out of context, record 41 of the log has it, ...]
+```
+
+The step's own results stay complete, so the model is always answering what it can still read. The cut is a pure function of the chain prefix, so a provider request still rebuilds byte for byte.
+
+**The `logs` tool.** Searches the raw record bodies of a session's log, this one by default or another session's by id, bounded by a query and a `from`/`to` record range, and reports a bounded window around each match:
+
+```
+logs(query="user schema", from=40, to=41)
+```
+
+The model knows exactly what to search for, because the index is in its context: semantic loss zero, drop loss zero.
+
+This work is on branch `memory-index-logs`, open as a pull request against upstream. Read more in [docs](docs/) for everything else upstream.
+
 # Self-Hosting Quickstart
 
 Run this command on your server machine (any always-on machine will do):
